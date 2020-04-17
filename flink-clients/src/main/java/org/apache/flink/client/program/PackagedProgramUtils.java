@@ -59,9 +59,15 @@ public enum PackagedProgramUtils {
 			int defaultParallelism,
 			@Nullable JobID jobID,
 			boolean suppressOutput) throws ProgramInvocationException {
+		final ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+		final JobGraph jobGraph;
 		final Pipeline pipeline = getPipelineFromProgram(packagedProgram, configuration,  defaultParallelism, suppressOutput);
-		final JobGraph jobGraph = FlinkPipelineTranslationUtil.getJobGraph(pipeline, configuration, defaultParallelism);
-
+		try {
+			Thread.currentThread().setContextClassLoader(packagedProgram.getUserCodeClassLoader());
+			jobGraph = FlinkPipelineTranslationUtil.getJobGraph(pipeline, configuration, defaultParallelism);
+		} finally {
+			Thread.currentThread().setContextClassLoader(contextClassLoader);
+		}
 		if (jobID != null) {
 			jobGraph.setJobID(jobID);
 		}
