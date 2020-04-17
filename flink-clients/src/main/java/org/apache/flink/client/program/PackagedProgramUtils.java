@@ -59,16 +59,21 @@ public enum PackagedProgramUtils {
 			int defaultParallelism,
 			@Nullable JobID jobID,
 			boolean suppressOutput) throws ProgramInvocationException {
-		final Pipeline pipeline = getPipelineFromProgram(packagedProgram, configuration,  defaultParallelism, suppressOutput);
-		final JobGraph jobGraph = FlinkPipelineTranslationUtil.getJobGraph(pipeline, configuration, defaultParallelism);
-
-		if (jobID != null) {
-			jobGraph.setJobID(jobID);
+		final ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+		final JobGraph jobGraph;
+		try {
+			Thread.currentThread().setContextClassLoader(packagedProgram.getUserCodeClassLoader());
+			final Pipeline pipeline = getPipelineFromProgram(packagedProgram, configuration, defaultParallelism, suppressOutput);
+			jobGraph = FlinkPipelineTranslationUtil.getJobGraph(pipeline, configuration, defaultParallelism);
+			if (jobID != null) {
+				jobGraph.setJobID(jobID);
+			}
+			jobGraph.addJars(packagedProgram.getJobJarAndDependencies());
+			jobGraph.setClasspaths(packagedProgram.getClasspaths());
+			jobGraph.setSavepointRestoreSettings(packagedProgram.getSavepointSettings());
+		} finally {
+			Thread.currentThread().setContextClassLoader(contextClassLoader);
 		}
-		jobGraph.addJars(packagedProgram.getJobJarAndDependencies());
-		jobGraph.setClasspaths(packagedProgram.getClasspaths());
-		jobGraph.setSavepointRestoreSettings(packagedProgram.getSavepointSettings());
-
 		return jobGraph;
 	}
 
@@ -96,9 +101,6 @@ public enum PackagedProgramUtils {
 			Configuration configuration,
 			int parallelism,
 			boolean suppressOutput) throws CompilerException, ProgramInvocationException {
-		final ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-
-		Thread.currentThread().setContextClassLoader(program.getUserCodeClassLoader());
 
 		final PrintStream originalOut = System.out;
 		final PrintStream originalErr = System.err;
@@ -150,7 +152,6 @@ public enum PackagedProgramUtils {
 				System.setOut(originalOut);
 				System.setErr(originalErr);
 			}
-			Thread.currentThread().setContextClassLoader(contextClassLoader);
 		}
 
 		throw generateException(
